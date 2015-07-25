@@ -6,30 +6,81 @@ import browser_cookie
 import requests
 import json
 import urllib
+import os
 
 from pool import ThreadPool
 
-def get_urls():
+class CheckObj(object):
+    """check object for a type of XSS vul char"""
+    def __init__(self, char, callback, logMsg):
+        self.char = char
+        self.callback = callback
+        self.logMsg = logMsg
 
-    db=_mysql.connect("10.125.8.217","1688sec","1688sec", "1688sec")
-    db.query("""SELECT uri, parameter FROM url_process_record""")
-    r = db.store_result()
 
-    urls = []
-    while True:
-        item = r.fetch_row()
-        if not item:
-            break
+class Scan(object):
+    """Scaning reflect XSS by a static way."""
 
-        uri = item[0][0]
+    def __init__(self, urls, checkObjs, requestFunc = None):
+        """
+        #   urls:           [(str, params), ...]            ->  list
+        #   checkobj:       CheckObj type's object          ->  CheckObj
+        #   requestFunc:    request function                ->function
+        #
+        #   in url:
+        #       str:        http://xx.com/xx                ->  string
+        #       params:     {p1: p1_str, p2: p2_str, ...}   ->  dict
+        """
+        assert(isinstance(urls, list))
+        assert(isinstance(checkObjs, list))
+        self.urls = urls
+        self.checkObj = checkObj
+
+
+        self.logFileiName = '/'.join([os.getcwd(), 'log.txt'])
+        self.logFile = open(self.logFileName, 'a+')
+
+        if requestFunc:
+            self.request = requestFunc
+
+    def close(self):
+        """close logFile"""
+        self.logFile.close()
+
+    def check_log(self, respText, obj):
+        """ check one resp by one obj
+        #   request url, check the return text by obj.callback, if true log [obj.url, obj.logMsg]
+        #
+        #   parameter:  respText  -> string
+        #               obj -> CheckObj
+        """
+        assert(isinstance(obj, CheckObj))
+        callback = obj.callback
+        logMsg = obj.logMsg
+
+        def log(msg):
+            self.logFile.write(' || '.join([url, logMsg, '\n']))
+
+        if callback(r.text):
+            log(logMsg)
+
+    #TODO: check all urls by all CheckObj
+
+
+    @staticmethod
+    def request(url):
+        """input a url, return its text"""
+        cj = browser_cookie.chrome()
+
         try:
-            params = json.loads(item[0][1])
+            r = requests.get(url, cookies=cj)
         except:
-            continue
+            print("Error Response for URL: %s" % url)
 
-        urls.append((uri, params))
+        return r.text
 
-    return urls
+
+
 
 def for_url(urls, callback):
 
@@ -39,31 +90,7 @@ def for_url(urls, callback):
 
         callback(uri, parameters)
 
-f = open("a.txt", "a+")
-def request_log(item):
 
-    url = item[0]
-    case = item[1]
-
-    #print(url)
-    cj = browser_cookie.chrome()
-    try:
-        r = requests.get(url, cookies=cj)
-    except:
-        #print("error:" + url)
-        return
-
-    try:
-        if r.text and r.text.index(case) > -1:
-            print("get:" + url)
-            f.write(url + '\n')
-        else:
-            print("None")
-    except:
-        print(r.text)
-
-check_list = ["<abbbbc"]
-urls = []
 def gen_urls(uri, params):
 
         if not params:
