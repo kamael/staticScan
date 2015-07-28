@@ -1,44 +1,35 @@
 
 
 from __future__ import print_function
-import _mysql
+#import _mysql
 import browser_cookie
 import requests
-import json
+#import json
 import urllib
 import os
 
-from pool import ThreadPool
-
-class CheckObj(object):
-    """check object for a type of XSS vul char"""
-    def __init__(self, char, callback, logMsg):
-        self.char = char
-        self.callback = callback
-        self.logMsg = logMsg
-
+#from pool import ThreadPool
+from checks import CheckObj, getChecks
 
 class Scan(object):
     """Scaning reflect XSS by a static way."""
 
-    def __init__(self, urls, checkObjs, requestFunc = None):
+    def __init__(self, checkObjs, requestFunc = None):
         """
-        #   urls:           [(str, params), ...]            ->  list
-        #   checkobj:       CheckObj type's object          ->  CheckObj
-        #   requestFunc:    request function                ->function
+        #   checkObjs:      [checkObj, checkObj, ...]       ->  list
+        #   requestFunc:    request function                ->  function
         #
-        #   in url:
-        #       str:        http://xx.com/xx                ->  string
-        #       params:     {p1: p1_str, p2: p2_str, ...}   ->  dict
+        #   in checkObjs:
+        #       checkobj:   CheckObj type's object          ->  CheckObj
         """
-        assert(isinstance(urls, list))
         assert(isinstance(checkObjs, list))
-        self.urls = urls
-        self.checkObj = checkObj
+        self.checkObjs = checkObjs
 
+        self.ANCHER = CheckObj.getANCHER()
 
-        self.logFileiName = '/'.join([os.getcwd(), 'log.txt'])
-        self.logFile = open(self.logFileName, 'a+')
+        logFileName = '/'.join([os.getcwd(), 'log.txt'])
+        print("log file at %s" % logFileName)
+        self.logFile = open(logFileName, 'a+')
 
         if requestFunc:
             self.request = requestFunc
@@ -47,12 +38,12 @@ class Scan(object):
         """close logFile"""
         self.logFile.close()
 
-    def check_log(self, respText, obj):
+    def check_log(self, url, respText, obj):
         """ check one resp by one obj
-        #   request url, check the return text by obj.callback, if true log [obj.url, obj.logMsg]
+        #   check the return text by obj.callback, if true log [url, obj.logMsg]
         #
-        #   parameter:  respText  -> string
-        #               obj -> CheckObj
+        #   parameter:  respText    -> string
+        #               obj         -> CheckObj
         """
         assert(isinstance(obj, CheckObj))
         callback = obj.callback
@@ -61,10 +52,38 @@ class Scan(object):
         def log(msg):
             self.logFile.write(' || '.join([url, logMsg, '\n']))
 
-        if callback(r.text):
+        if callback(respText):
             log(logMsg)
 
-    #TODO: check all urls by all CheckObj
+    def url_log(self, urlObj):
+        """ check url by all checkObjs
+        #   request url, check the return text by all checkObjs using check_log
+        #
+        #   parameter:  urlObj  -> (str, params)
+        #
+        #   in urlObj:
+        #       str:        http://xx.com/xx                ->  string
+        #       params:     {p1: p1_str, p2: p2_str, ...}   ->  dict
+        """
+        assert(isinstance(urlObj, tuple))
+        url = urlObj[0]
+        params = urlObj[1]
+
+        insertStr = self.ANCHER[0]
+        for obj in self.checkObjs:
+            insertStr += obj.char
+        insertStr += self.ANCHER[1]
+
+        for item in params:
+            oldValue = params[item]
+            params[item] += insertStr
+
+            requestUrl = '?'.join([url, urllib.urlencode(params)])
+            text = requests.get(requestUrl).text
+            for obj in self.checkObjs:
+                self.check_log(requestUrl, text, obj)
+
+            params[item] = oldValue
 
 
     @staticmethod
@@ -81,40 +100,10 @@ class Scan(object):
 
 
 
-
-def for_url(urls, callback):
-
-    for item in urls:
-        uri = item[0]
-        parameters = item[1]
-
-        callback(uri, parameters)
-
-
-def gen_urls(uri, params):
-
-        if not params:
-            return
-
-        for key in params:
-            params[key] = params[key][0]
-
-        for key in params:
-            oldValue = params[key]
-
-            for case in check_list:
-                params[key] = oldValue + case
-                url = '?'.join([uri, urllib.urlencode(params)])
-                url = "http://" + url
-                params[key] = oldValue
-
-                urls.append((url, case))
-                #request_log(url, case)
-
-
 if __name__ == "__main__":
 
-    for_url(get_urls(), gen_urls)
-    p = ThreadPool(request_log, urls, 30)
-    p.start()
+    scan = Scan(getChecks())
+    urlObj = ("http://urltest.sinaapp.com/uxss/c.php", {'x': 'x'})
+    scan.url_log(urlObj)
+    scan.close()
 
