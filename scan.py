@@ -1,14 +1,11 @@
 
 
 from __future__ import print_function
-#import _mysql
 import browser_cookie
 import requests
-#import json
 import urllib
 import os
 
-#from pool import ThreadPool
 from checks import CheckObj, getChecks
 
 class Scan(object):
@@ -34,9 +31,17 @@ class Scan(object):
         if requestFunc:
             self.request = requestFunc
 
-    def close(self):
-        """close logFile"""
-        self.logFile.close()
+    @staticmethod
+    def request(url):
+        """input a url, return its text"""
+        cj = browser_cookie.chrome()
+
+        try:
+            r = requests.get(url, cookies=cj)
+        except:
+            print("Error Response for URL: %s" % url)
+
+        return r.text
 
     def check_log(self, url, respText, obj):
         """ check one resp by one obj
@@ -54,6 +59,7 @@ class Scan(object):
 
         if callback(respText):
             log(logMsg)
+
 
     def url_log(self, urlObj):
         """ check url by all checkObjs
@@ -85,18 +91,9 @@ class Scan(object):
 
             params[item] = oldValue
 
-
-    @staticmethod
-    def request(url):
-        """input a url, return its text"""
-        cj = browser_cookie.chrome()
-
-        try:
-            r = requests.get(url, cookies=cj)
-        except:
-            print("Error Response for URL: %s" % url)
-
-        return r.text
+    def close(self):
+        """close logFile"""
+        self.logFile.close()
 
 
 
